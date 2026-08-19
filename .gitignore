@@ -48,5 +48,6 @@ Thumbs.db
 legal_knowledge/
 vector-store/
 models/
-NDA.pdf
-NDAA.docx
+
+agent/
+prompt_library/

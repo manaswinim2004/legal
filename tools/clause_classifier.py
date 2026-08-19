@@ -180,10 +180,6 @@ class ClauseClassifier:
 
         for clause in clauses:
 
-            # Ignore document-level material.
-            if clause.get("title") == "Preamble":
-                continue
-
             result = self.classify(
                 clause["text"]
             )

@@ -78,114 +78,63 @@ class ClauseSplitter:
         text: str,
         block: dict,
     ) -> bool:
-
         block_type = block.get("type", "")
 
-        # Explicit DOCX heading
-        if block_type == "heading":
+        if block_type in ("heading", "title"):
             return True
 
-        # Numbered provision
         if self._is_numbered(text):
             return True
 
-        # Lettered provision
         if self._is_lettered(text):
             return True
 
-        # Roman numeral provision
         if self._is_roman(text):
             return True
 
-        # Bracketed substantive provision
+        if self._is_all_caps_heading(text):
+            return True
+
         if self._is_bracketed_provision(text):
             return True
 
         return False
 
-    # ---------------------------------------------------------
-    # Numbered provisions
-    # ---------------------------------------------------------
-
     def _is_numbered(self, text: str) -> bool:
-
         pattern = (
-            r"^(?:section\s+)?"
+            r"^(?:(?:section|article|clause|paragraph|item)\s+)?"
             r"\d+(?:\.\d+)*"
-            r"(?:[\.\):\-])"
-            r"(?:\s+|$)"
+            r"(?:[\.\):\-\s]|$)"
         )
+        return bool(re.match(pattern, text, re.IGNORECASE))
 
-        return bool(
-            re.match(
-                pattern,
-                text,
-                re.IGNORECASE,
-            )
-        )
-
-    # ---------------------------------------------------------
-    # Lettered provisions
-    # ---------------------------------------------------------
+    def _is_all_caps_heading(self, text: str) -> bool:
+        # Match standalone all-caps headings like "CONFIDENTIAL INFORMATION", "TERM AND TERMINATION"
+        cleaned = text.strip().rstrip(".:-")
+        words = cleaned.split()
+        if 1 <= len(words) <= 8 and len(cleaned) <= 60:
+            if cleaned.isupper() and any(c.isalpha() for c in cleaned):
+                return True
+        return False
 
     def _is_lettered(self, text: str) -> bool:
-
-        pattern = (
-            r"^(?:"
-            r"\([a-zA-Z]\)"
-            r"|"
-            r"[a-zA-Z]\."
-            r")\s+"
-        )
-
-        return bool(
-            re.match(pattern, text)
-        )
-
-    # ---------------------------------------------------------
-    # Roman numeral provisions
-    # ---------------------------------------------------------
+        pattern = r"^(?:\([a-zA-Z]\)|[a-zA-Z]\.)\s+"
+        return bool(re.match(pattern, text))
 
     def _is_roman(self, text: str) -> bool:
-
-        pattern = (
-            r"^\("
-            r"(?:"
-            r"i{1,3}"
-            r"|iv"
-            r"|v"
-            r"|vi{0,3}"
-            r"|ix"
-            r"|x"
-            r")"
-            r"\)\s+"
-        )
-
-        return bool(
-            re.match(
-                pattern,
-                text,
-                re.IGNORECASE,
-            )
-        )
-
-    # ---------------------------------------------------------
-    # Bracketed provisions
-    # ---------------------------------------------------------
+        pattern = r"^(?:\((?:i{1,3}|iv|v|vi{0,3}|ix|x)\)|(?:i{1,3}|iv|v|vi{0,3}|ix|x)\.)(?:\s+|$)"
+        return bool(re.match(pattern, text, re.IGNORECASE))
 
     def _is_bracketed_provision(
         self,
         text: str,
     ) -> bool:
-
         if not text.startswith("["):
             return False
 
-        if len(text) < 40:
+        if len(text) < 20:
             return False
 
-        # If the entire thing is something like
-        # [INVESTOR] [COMPANY], don't classify it.
         if text.upper() in {
             "[INVESTOR] [COMPANY]",
             "[SIGNATURE PAGE FOLLOWS]",
@@ -195,54 +144,42 @@ class ClauseSplitter:
 
         return True
 
-    # ---------------------------------------------------------
-    # Title
-    # ---------------------------------------------------------
-
     def _extract_title(self, text: str) -> str:
-
+        # Try Article/Section/Clause
         match = re.match(
-            r"^(?:section\s+)?"
-            r"(\d+(?:\.\d+)*)",
+            r"^((?:section|article|clause|paragraph)\s+\d+(?:\.\d+)*)",
             text,
             re.IGNORECASE,
         )
-
         if match:
-            return f"Provision {match.group(1)}"
+            return match.group(1).title()
 
-        match = re.match(
-            r"^(\([a-zA-Z]\)|[a-zA-Z]\.)",
-            text,
-        )
-
+        match = re.match(r"^(\d+(?:\.\d+)*)", text)
         if match:
-            return f"Provision {match.group(1)}"
+            return f"Section {match.group(1)}"
 
-        match = re.match(
-            r"^(\([ivxlcdm]+\))",
-            text,
-            re.IGNORECASE,
-        )
-
+        match = re.match(r"^(\([a-zA-Z]\)|[a-zA-Z]\.)", text)
         if match:
-            return f"Provision {match.group(1)}"
+            return f"Item {match.group(1)}"
+
+        match = re.match(r"^(\((?:i{1,3}|iv|v|vi{0,3}|ix|x)\)|(?:i{1,3}|iv|v|vi{0,3}|ix|x)\.)", text, re.IGNORECASE)
+        if match:
+            return f"Item {match.group(1)}"
+
+        # If it's an all-caps short heading, use that as title
+        cleaned = text.strip().rstrip(".:-")
+        if cleaned.isupper() and len(cleaned) <= 60:
+            return cleaned.title()
 
         return "Provision"
-
-    # ---------------------------------------------------------
-    # Save
-    # ---------------------------------------------------------
 
     def _save_clause(
         self,
         clauses: list,
         clause: dict,
     ):
-
         text = clause["text"].strip()
-
-        if len(text) < 40:
+        if len(text) < 15:
             return
 
         clauses.append({

@@ -17,3 +17,5 @@ langchain-chroma
 chromadb
 sentence-transformers
 pypdf
+groq
+python-dotenv
